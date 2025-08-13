@@ -24,24 +24,36 @@
   input[type="file"]{display:none}
 
   .card{margin-top:16px;background:var(--panel);border:1px solid #212853;border-radius:18px;
-        padding:clamp(14px,3vw,24px);box-shadow:0 10px 30px rgba(0,0,0,.25);min-height:360px}
+        padding:clamp(14px,3vw,24px);box-shadow:0 10px 30px rgba(0,0,0,.25);min-height:420px}
   .level-topic{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;opacity:.9;margin-bottom:8px}
   .badge{background:var(--muted);padding:4px 8px;border-radius:999px}
-  .prompt{font-size:clamp(20px,4.6vw,34px);margin:8px 0 6px;line-height:1.25;word-break:break-word}
-  .example{font-size:clamp(14px,2.5vw,18px);color:#cbd5ff;margin:6px 0 12px}
 
-  .options{display:grid;grid-template-columns:1fr;gap:10px;width:100%}
+  /* ====== РАЗМЕРЫ ТЕКСТА (меняй тут) ====== */
+  .prompt{
+    /* ⬇️ увеличь/уменьши этот размер по вкусу */
+    font-size: clamp(26px, 6.2vw, 44px); /* БЫЛО 34px */
+    margin:8px 0 6px; line-height:1.25; word-break:break-word;
+    text-align:center;   /* центрируем слово */
+  }
+  .example{
+    /* ⬇️ увеличь/уменьши этот размер по вкусу */
+    font-size: clamp(16px, 3.8vw, 22px); /* БЫЛО 18px */
+    color:#cbd5ff; margin: 10px 0 18px;
+    text-align:center;   /* центрируем пример */
+  }
+
+  .options{display:grid;grid-template-columns:1fr;gap:10px;width:100%;margin-top:8px}
   @media(min-width:560px){.options{grid-template-columns:1fr 1fr 1fr}}
   .opt{padding:12px;border-radius:12px;background:#1c213a;border:1px solid #2a3367;
        min-height:52px;display:flex;align-items:center;justify-content:center;text-align:center}
-
   .opt.correct{background:var(--ok);border-color:var(--ok-b)}
   .opt.wrong{background:var(--bad);border-color:var(--bad-b)}
 
-  .footer{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-top:14px}
+  .footer{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-top:16px}
   .progress{font-size:14px;opacity:.85}
   .hint{font-size:13px;opacity:.75}
   .error{margin-top:8px;color:#ff9aa5;font-size:14px;white-space:pre-wrap}
+  .right-actions{display:flex;gap:8px;align-items:center}
 </style>
 </head>
 <body>
@@ -62,10 +74,9 @@
       </select>
       <button class="secondary" id="btnShuffle">Перемешать</button>
       <button class="secondary" id="btnWrong" disabled>Повторить ошибочные</button>
-
       <label class="secondary" for="fileInput" style="display:inline-block;padding:10px 14px;border-radius:12px;cursor:pointer;">Загрузить JSON</label>
       <input type="file" id="fileInput" accept=".json,application/json" />
-      <button class="primary" id="btnNext">Next →</button>
+      <!-- Кнопки Next/таймер ПЕРЕНЕСЕНЫ ВНИЗ (во footer) -->
     </div>
   </header>
 
@@ -74,23 +85,31 @@
       <span class="badge" id="levelBadge">A2</span>
       <span class="badge" id="topicBadge">Alltag</span>
       <span class="badge" id="metaCount">—</span>
+      <span class="badge" id="importInfo" title="Сколько записей подгружено?">…</span>
     </div>
+
     <div class="prompt" id="prompt">—</div>
     <div class="example" id="example"></div>
+
     <div class="options" id="options"></div>
+
     <div class="footer">
       <div class="progress" id="progress">1 / 1</div>
-      <div class="hint">Тапни по варианту. Правильный — зелёный. Ошибка подсветит верный. После ответа — автопереход за 4 сек.</div>
+      <div class="right-actions">
+        <div class="hint">Тапни по варианту. После ответа — автопереход.</div>
+        <button class="primary" id="btnNext">Next →</button>
+      </div>
     </div>
+
     <div class="error" id="err"></div>
   </div>
 </div>
 
 <script>
 /* ========= ПАРАМЕТРЫ ========= */
-var AUTONEXT_SECONDS = 4;
+var AUTONEXT_SECONDS = 4; // ⬅️ Таймер автоперехода в секундах. Можешь менять.
 
-/* ========= БАЗА ПО УМОЛЧАНИЮ (короткая демо; большую подливаем JSON) ========= */
+/* ========= ДЕМО-БАЗА (для старта). Большую базу загрузим из words.json ========= */
 var DEFAULT = {
   A2: [
     {level:"A2",topic:"Alltag",de:"der Alltag",ru:"повседневная жизнь",ex_de:"Im Alltag trinke ich morgens Kaffee.",ex_ru:"В повседневной жизни я пью кофе по утрам."},
@@ -120,6 +139,7 @@ var source = [];          // активные карточки
 var order = [];           // порядок индексов
 var pointer = 0;          // позиция
 var answeredWrong = {};   // { orderIndex: true }
+var wrongCounter = 0;     // ⬅️ счётчик ошибок для кнопки
 
 var countdownTimer = null, countdownTimeout = null, secondsLeft = AUTONEXT_SECONDS;
 
@@ -134,6 +154,7 @@ var fileInput     = document.getElementById('fileInput');
 var levelBadge    = document.getElementById('levelBadge');
 var topicBadge    = document.getElementById('topicBadge');
 var metaCount     = document.getElementById('metaCount');
+var importInfo    = document.getElementById('importInfo');
 var promptEl      = document.getElementById('prompt');
 var exampleEl     = document.getElementById('example');
 var optionsEl     = document.getElementById('options');
@@ -160,13 +181,46 @@ function flatAllLevels(){ return [].concat(DATA.A2||[], DATA.B1||[], DATA.B2||[]
   btnWrong  .addEventListener('click', function(){ cancelAutoNext(); repeatWrong(); });
   btnNext   .addEventListener('click', function(){ cancelAutoNext(); nextCard(); });
 
-  // загрузка JSON
+  // загрузка JSON вручную
   fileInput.addEventListener('change', onJsonChosen);
+
+  // автозагрузка words.json (если лежит рядом)
+  autoFetchWordsJSON();
 
   rebuildTopics();
   applyFilters();
 })();
 
+/* ==== автозагрузка words.json с GitHub Pages ==== */
+function autoFetchWordsJSON(){
+  fetch('words.json', {cache:'no-store'})
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(arr){ var added = mergeImported(arr); importInfo.textContent = 'Импорт: '+added+' записей'; })
+    .catch(function(){ importInfo.textContent = 'Импорт: 0 (нет words.json)'; });
+}
+
+function mergeImported(arr){
+  var added=0;
+  for (var i=0;i<arr.length;i++){
+    var row = arr[i] || {};
+    var L = (row.level||"").toUpperCase();
+    if (L!=="A2" && L!=="B1" && L!=="B2") continue;
+    if (!DATA[L]) DATA[L]=[];
+    DATA[L].push({
+      level:L,
+      topic: row.topic || "Allgemein",
+      de:    (row.de||"").toString(),
+      ru:    (row.ru||"").toString(),
+      ex_de: (row.ex_de||"").toString(),
+      ex_ru: (row.ex_ru||"").toString()
+    });
+    added++;
+  }
+  if (added>0){ rebuildTopics(); applyFilters(); }
+  return added;
+}
+
+/* ========= ФИЛЬТРЫ/РЕНДЕР ========= */
 function rebuildTopics(){
   var data = (level==="ALL") ? flatAllLevels() : (DATA[level]||[]);
   var topicsMap = {};
@@ -184,6 +238,8 @@ function applyFilters(){
   source = (topic==='all') ? base : base.filter(function(w){ return w.topic===topic; });
   if (!source || !source.length) source = base.length? base : flatAllLevels();
   answeredWrong = {};
+  wrongCounter = 0;
+  updateWrongButton();
   resetOrder();
   renderCard();
 }
@@ -193,7 +249,6 @@ function resetOrder(){
   for (var i=0;i<source.length;i++) order.push(i);
   shuffle(order);
   pointer = 0;
-  btnWrong.disabled = true;
   updateMeta();
 }
 
@@ -248,6 +303,7 @@ function renderCard(){
   }
 }
 
+/* ========= ЛОГИКА ОТВЕТА / ТАЙМЕР ========= */
 function onAnswer(btn, correct, rightAnswer){
   var children = optionsEl.children;
   for (var i=0;i<children.length;i++) children[i].disabled = true;
@@ -258,15 +314,18 @@ function onAnswer(btn, correct, rightAnswer){
     for (var j=0;j<children.length;j++){
       if (children[j].textContent === rightAnswer) children[j].classList.add('correct');
     }
-    answeredWrong[pointer] = true;
-    btnWrong.disabled = false;
+    if (!answeredWrong[pointer]){ // считаем каждую карточку максимум один раз
+      answeredWrong[pointer] = true;
+      wrongCounter++;
+      updateWrongButton();
+    }
   }
   startAutoNext();
 }
 
 function nextCard(){
   if (pointer < order.length-1){ pointer++; renderCard(); }
-  else { progressEl.textContent = "Готово! " + order.length + " / " + order.length; btnWrong.disabled = !Object.keys(answeredWrong).length; }
+  else { progressEl.textContent = "Готово! " + order.length + " / " + order.length; }
 }
 
 function repeatWrong(){
@@ -279,11 +338,18 @@ function repeatWrong(){
   }
   source = wrong.length ? wrong : source;
   answeredWrong = {};
+  wrongCounter = 0;
+  updateWrongButton();
   resetOrder();
   renderCard();
 }
 
-/* === Автопереход и таймер на Next === */
+function updateWrongButton(){
+  btnWrong.disabled = (wrongCounter===0);
+  btnWrong.textContent = wrongCounter ? ("Повторить ошибочные ("+wrongCounter+")") : "Повторить ошибочные";
+}
+
+/* === Автопереход и таймер на Next (кнопка внизу) === */
 function startAutoNext(){
   cancelAutoNext();
   secondsLeft = AUTONEXT_SECONDS;
@@ -302,15 +368,7 @@ function cancelAutoNext(){
 function setNextLabel(s){ btnNext.textContent = "Next ("+s+")"; }
 function resetNextLabel(){ btnNext.textContent = "Next →"; }
 
-/* === Импорт JSON ===
-Формат файла (массив объектов):
-[
-  {"level":"A2","topic":"Alltag","de":"der Alltag","ru":"повседневная жизнь","ex_de":"Im Alltag ...","ex_ru":"В повседневной ..."},
-  {"level":"B1","topic":"Arbeit","de":"die Voraussetzung","ru":"условие","ex_de":"...","ex_ru":"..."},
-  {"level":"B2","topic":"Wirtschaft","de":"die Nachhaltigkeit","ru":"устойчивость","ex_de":"...","ex_ru":"..."}
-]
-Можно грузить 1500–2000 записей без проблем.
-*/
+/* === Импорт JSON вручную (кнопкой) === */
 function onJsonChosen(evt){
   var file = evt.target && evt.target.files && evt.target.files[0];
   if (!file) return;
@@ -318,24 +376,7 @@ function onJsonChosen(evt){
   reader.onload = function(){
     try{
       var arr = JSON.parse(reader.result || "[]");
-      var added=0, L,row;
-      for (var i=0;i<arr.length;i++){
-        row = arr[i] || {};
-        L = (row.level||"").toUpperCase();
-        if (L!=="A2" && L!=="B1" && L!=="B2") continue;
-        if (!DATA[L]) DATA[L]=[];
-        DATA[L].push({
-          level:L,
-          topic: row.topic || "Allgemein",
-          de:    (row.de||"").toString(),
-          ru:    (row.ru||"").toString(),
-          ex_de: (row.ex_de||"").toString(),
-          ex_ru: (row.ex_ru||"").toString()
-        });
-        added++;
-      }
-      if (!added) throw new Error("В файле не найдено валидных записей.");
-      rebuildTopics(); applyFilters();
+      var added = mergeImported(arr);
       errEl.textContent = "Импортировано: " + added + " записей.";
       fileInput.value = "";
     } catch(e){
