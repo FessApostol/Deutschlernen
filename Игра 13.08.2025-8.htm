@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Deutsch A2–B2 Trainer (Full)</title>
+<style>
+  :root { --gap:14px; --bg:#0f1220; --fg:#eef2ff; --panel:#151935; --muted:#283053;
+          --ok:#0f3b23; --ok-b:#1dd17c; --bad:#511a21; --bad-b:#ff5c7a; --btn:#1c213a; --btn2:#3a5bff; }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+  .wrap{max-width:960px;margin:0 auto;padding:20px}
+  header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+  h1{margin:0;font-size:clamp(18px,2.6vw,28px)}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  select,button,label{font-size:15px}
+  select,button{border:0;padding:10px 14px;border-radius:12px;background:var(--btn);color:var(--fg)}
+  button.primary{background:var(--btn2)}
+  button.secondary{background:#283053}
+  button:disabled{opacity:.55;cursor:not-allowed}
+  .switch{display:flex;gap:10px;align-items:center}
+  .switch input{accent-color:#3a5bff}
+  input[type="file"]{display:none}
+
+  .card{margin-top:16px;background:var(--panel);border:1px solid #212853;border-radius:18px;
+        padding:clamp(14px,3vw,24px);box-shadow:0 10px 30px rgba(0,0,0,.25);min-height:360px}
+  .level-topic{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;opacity:.9;margin-bottom:8px}
+  .badge{background:var(--muted);padding:4px 8px;border-radius:999px}
+  .prompt{font-size:clamp(20px,4.6vw,34px);margin:8px 0 6px;line-height:1.25;word-break:break-word}
+  .example{font-size:clamp(14px,2.5vw,18px);color:#cbd5ff;margin:6px 0 12px}
+
+  .options{display:grid;grid-template-columns:1fr;gap:10px;width:100%}
+  @media(min-width:560px){.options{grid-template-columns:1fr 1fr 1fr}}
+  .opt{padding:12px;border-radius:12px;background:#1c213a;border:1px solid #2a3367;
+       min-height:52px;display:flex;align-items:center;justify-content:center;text-align:center}
+
+  .opt.correct{background:var(--ok);border-color:var(--ok-b)}
+  .opt.wrong{background:var(--bad);border-color:var(--bad-b)}
+
+  .footer{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-top:14px}
+  .progress{font-size:14px;opacity:.85}
+  .hint{font-size:13px;opacity:.75}
+  .error{margin-top:8px;color:#ff9aa5;font-size:14px;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🇩🇪 Интерактив: слова + примеры + тест</h1>
+    <div class="controls">
+      <div class="switch">
+        <label><input type="radio" name="mode" value="de2ru" checked> DE→RU</label>
+        <label><input type="radio" name="mode" value="ru2de"> RU→DE</label>
+      </div>
+      <select id="levelSelect" title="Уровень">
+        <option value="A2">A2</option><option value="B1">B1</option><option value="B2">B2</option>
+        <option value="ALL">Все уровни</option>
+      </select>
+      <select id="topicSelect" title="Тема">
+        <option value="all">Все темы</option>
+      </select>
+      <button class="secondary" id="btnShuffle">Перемешать</button>
+      <button class="secondary" id="btnWrong" disabled>Повторить ошибочные</button>
+
+      <label class="secondary" for="fileInput" style="display:inline-block;padding:10px 14px;border-radius:12px;cursor:pointer;">Загрузить JSON</label>
+      <input type="file" id="fileInput" accept=".json,application/json" />
+      <button class="primary" id="btnNext">Next →</button>
+    </div>
+  </header>
+
+  <div class="card">
+    <div class="level-topic">
+      <span class="badge" id="levelBadge">A2</span>
+      <span class="badge" id="topicBadge">Alltag</span>
+      <span class="badge" id="metaCount">—</span>
+    </div>
+    <div class="prompt" id="prompt">—</div>
+    <div class="example" id="example"></div>
+    <div class="options" id="options"></div>
+    <div class="footer">
+      <div class="progress" id="progress">1 / 1</div>
+      <div class="hint">Тапни по варианту. Правильный — зелёный. Ошибка подсветит верный. После ответа — автопереход за 4 сек.</div>
+    </div>
+    <div class="error" id="err"></div>
+  </div>
+</div>
+
+<script>
+/* ========= ПАРАМЕТРЫ ========= */
+var AUTONEXT_SECONDS = 4;
+
+/* ========= БАЗА ПО УМОЛЧАНИЮ (короткая демо; большую подливаем JSON) ========= */
+var DEFAULT = {
+  A2: [
+    {level:"A2",topic:"Alltag",de:"der Alltag",ru:"повседневная жизнь",ex_de:"Im Alltag trinke ich morgens Kaffee.",ex_ru:"В повседневной жизни я пью кофе по утрам."},
+    {level:"A2",topic:"Zeit",de:"die Stunde",ru:"час",ex_de:"Der Kurs dauert eine Stunde.",ex_ru:"Курс длится один час."},
+    {level:"A2",topic:"Essen",de:"der Apfel",ru:"яблоко",ex_de:"Ich esse einen Apfel.",ex_ru:"Я ем яблоко."},
+    {level:"A2",topic:"Stadt",de:"die Strasse",ru:"улица",ex_de:"Die Strasse ist laut.",ex_ru:"Улица шумная."},
+    {level:"A2",topic:"Gesundheit",de:"der Arzt",ru:"врач",ex_de:"Ich habe einen Termin beim Arzt.",ex_ru:"У меня запись к врачу."}
+  ],
+  B1: [
+    {level:"B1",topic:"Arbeit",de:"die Voraussetzung",ru:"условие, предпосылка",ex_de:"Deutschkenntnisse sind eine Voraussetzung.",ex_ru:"Знание немецкого — условие."},
+    {level:"B1",topic:"Reisen",de:"die Unterkunft",ru:"жильё",ex_de:"Wir suchen eine guenstige Unterkunft.",ex_ru:"Мы ищем недорогое жильё."},
+    {level:"B1",topic:"Kommunikation",de:"sich erkundigen",ru:"осведомляться, справляться",ex_de:"Ich erkundige mich nach dem Preis.",ex_ru:"Я узнаю цену."}
+  ],
+  B2: [
+    {level:"B2",topic:"Arbeit",de:"die Herausforderung",ru:"вызов, сложная задача",ex_de:"Die neue Stelle ist eine Herausforderung.",ex_ru:"Новая должность — вызов."},
+    {level:"B2",topic:"Politik",de:"die Massnahme",ru:"мера",ex_de:"Die Regierung beschliesst neue Massnahmen.",ex_ru:"Правительство принимает новые меры."},
+    {level:"B2",topic:"Wissenschaft",de:"die Erkenntnis",ru:"познание, вывод",ex_de:"Die Studie fuehrt zu neuer Erkenntnis.",ex_ru:"Исследование приводит к новому выводу."}
+  ]
+};
+
+/* ========= СОСТОЯНИЕ ========= */
+var DATA = JSON.parse(JSON.stringify(DEFAULT));
+var mode = "de2ru";       // de2ru | ru2de
+var level = "A2";         // A2 | B1 | B2 | ALL
+var topic = "all";
+var source = [];          // активные карточки
+var order = [];           // порядок индексов
+var pointer = 0;          // позиция
+var answeredWrong = {};   // { orderIndex: true }
+
+var countdownTimer = null, countdownTimeout = null, secondsLeft = AUTONEXT_SECONDS;
+
+/* ========= DOM ========= */
+var levelSelect   = document.getElementById('levelSelect');
+var topicSelect   = document.getElementById('topicSelect');
+var btnShuffle    = document.getElementById('btnShuffle');
+var btnWrong      = document.getElementById('btnWrong');
+var btnNext       = document.getElementById('btnNext');
+var fileInput     = document.getElementById('fileInput');
+
+var levelBadge    = document.getElementById('levelBadge');
+var topicBadge    = document.getElementById('topicBadge');
+var metaCount     = document.getElementById('metaCount');
+var promptEl      = document.getElementById('prompt');
+var exampleEl     = document.getElementById('example');
+var optionsEl     = document.getElementById('options');
+var progressEl    = document.getElementById('progress');
+var errEl         = document.getElementById('err');
+
+/* ========= УТИЛЫ ========= */
+function shuffle(arr){ for(var i=arr.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1)); var t=arr[i]; arr[i]=arr[j]; arr[j]=t;} return arr; }
+function flatAllLevels(){ return [].concat(DATA.A2||[], DATA.B1||[], DATA.B2||[]); }
+
+/* ========= ИНИЦ ========= */
+(function init(){
+  // режим
+  var radios = document.getElementsByName('mode');
+  for (var i=0;i<radios.length;i++){
+    radios[i].addEventListener('change', function(e){ mode = e.target.value; renderCard(); });
+  }
+  // селекты
+  levelSelect.addEventListener('change', function(){ level = levelSelect.value; rebuildTopics(); applyFilters(); });
+  topicSelect.addEventListener('change', function(){ topic = topicSelect.value; applyFilters(); });
+
+  // кнопки
+  btnShuffle.addEventListener('click', function(){ cancelAutoNext(); resetOrder(); renderCard(); });
+  btnWrong  .addEventListener('click', function(){ cancelAutoNext(); repeatWrong(); });
+  btnNext   .addEventListener('click', function(){ cancelAutoNext(); nextCard(); });
+
+  // загрузка JSON
+  fileInput.addEventListener('change', onJsonChosen);
+
+  rebuildTopics();
+  applyFilters();
+})();
+
+function rebuildTopics(){
+  var data = (level==="ALL") ? flatAllLevels() : (DATA[level]||[]);
+  var topicsMap = {};
+  for (var i=0;i<data.length;i++){ topicsMap[data[i].topic] = true; }
+  var topics = Object.keys(topicsMap).sort();
+  topicSelect.innerHTML = '<option value="all">Все темы</option>';
+  for (var j=0;j<topics.length;j++){
+    var o=document.createElement('option'); o.value=topics[j]; o.textContent=topics[j]; topicSelect.appendChild(o);
+  }
+  topic = 'all';
+}
+
+function applyFilters(){
+  var base = (level==="ALL") ? flatAllLevels() : (DATA[level]||[]);
+  source = (topic==='all') ? base : base.filter(function(w){ return w.topic===topic; });
+  if (!source || !source.length) source = base.length? base : flatAllLevels();
+  answeredWrong = {};
+  resetOrder();
+  renderCard();
+}
+
+function resetOrder(){
+  order = [];
+  for (var i=0;i<source.length;i++) order.push(i);
+  shuffle(order);
+  pointer = 0;
+  btnWrong.disabled = true;
+  updateMeta();
+}
+
+function updateMeta(){
+  progressEl.textContent = Math.min(pointer+1, order.length) + " / " + order.length;
+  levelBadge.textContent = (level==="ALL") ? "A2–B2" : level;
+  topicBadge.textContent = (topic==='all') ? "Alle Themen" : topic;
+  metaCount.textContent  = "в наборе: " + order.length;
+}
+
+function renderCard(){
+  try{
+    if (!order.length){ promptEl.textContent="Нет карточек."; exampleEl.textContent=""; optionsEl.innerHTML=""; return; }
+
+    updateMeta(); errEl.textContent = "";
+    var idx = order[pointer];
+    var card = source[idx] || {};
+
+    var q = (mode==='de2ru') ? (card.de||"") : (card.ru||"");
+    var a = (mode==='de2ru') ? (card.ru||"") : (card.de||"");
+    var ex= (mode==='de2ru') ? (card.ex_de||"") : (card.ex_ru||"");
+
+    promptEl.textContent = q || "—";
+    exampleEl.textContent = ex || "";
+
+    // варианты
+    var pool = [];
+    for (var i=0;i<source.length;i++) if (i!==idx) pool.push(source[i]);
+    if (pool.length < 2){ pool = (level==="ALL") ? flatAllLevels() : (DATA[level]||[]).slice(0); }
+    shuffle(pool);
+    var distractors = [];
+    for (var k=0;k<pool.length && distractors.length<2;k++){
+      var txt = (mode==='de2ru') ? (pool[k].ru||"") : (pool[k].de||"");
+      if (txt && txt!==a) distractors.push(txt);
+    }
+    while (distractors.length<2) distractors.push("…");
+
+    var candidates = shuffle([a, distractors[0], distractors[1]]);
+
+    optionsEl.innerHTML = "";
+    for (var c=0;c<candidates.length;c++){
+      (function(txt){
+        var b=document.createElement('button');
+        b.type="button"; b.className="opt"; b.textContent=txt;
+        b.addEventListener('click', function(){ onAnswer(b, txt===a, a); });
+        optionsEl.appendChild(b);
+      })(candidates[c]);
+    }
+    resetNextLabel();
+  } catch(e){
+    errEl.textContent = "Ошибка: " + (e && e.message ? e.message : e);
+  }
+}
+
+function onAnswer(btn, correct, rightAnswer){
+  var children = optionsEl.children;
+  for (var i=0;i<children.length;i++) children[i].disabled = true;
+
+  if (correct){ btn.classList.add('correct'); }
+  else{
+    btn.classList.add('wrong');
+    for (var j=0;j<children.length;j++){
+      if (children[j].textContent === rightAnswer) children[j].classList.add('correct');
+    }
+    answeredWrong[pointer] = true;
+    btnWrong.disabled = false;
+  }
+  startAutoNext();
+}
+
+function nextCard(){
+  if (pointer < order.length-1){ pointer++; renderCard(); }
+  else { progressEl.textContent = "Готово! " + order.length + " / " + order.length; btnWrong.disabled = !Object.keys(answeredWrong).length; }
+}
+
+function repeatWrong(){
+  var keys = Object.keys(answeredWrong);
+  if (!keys.length) return;
+  var wrong = [];
+  for (var i=0;i<keys.length;i++){
+    var orderIdx = parseInt(keys[i],10);
+    wrong.push( source[ order[orderIdx] ] );
+  }
+  source = wrong.length ? wrong : source;
+  answeredWrong = {};
+  resetOrder();
+  renderCard();
+}
+
+/* === Автопереход и таймер на Next === */
+function startAutoNext(){
+  cancelAutoNext();
+  secondsLeft = AUTONEXT_SECONDS;
+  setNextLabel(secondsLeft);
+  countdownTimer = setInterval(function(){
+    secondsLeft--; setNextLabel(secondsLeft);
+    if (secondsLeft<=0){ clearInterval(countdownTimer); countdownTimer=null; }
+  },1000);
+  countdownTimeout = setTimeout(function(){ nextCard(); }, AUTONEXT_SECONDS*1000);
+}
+function cancelAutoNext(){
+  if (countdownTimer){ clearInterval(countdownTimer); countdownTimer=null; }
+  if (countdownTimeout){ clearTimeout(countdownTimeout); countdownTimeout=null; }
+  resetNextLabel();
+}
+function setNextLabel(s){ btnNext.textContent = "Next ("+s+")"; }
+function resetNextLabel(){ btnNext.textContent = "Next →"; }
+
+/* === Импорт JSON ===
+Формат файла (массив объектов):
+[
+  {"level":"A2","topic":"Alltag","de":"der Alltag","ru":"повседневная жизнь","ex_de":"Im Alltag ...","ex_ru":"В повседневной ..."},
+  {"level":"B1","topic":"Arbeit","de":"die Voraussetzung","ru":"условие","ex_de":"...","ex_ru":"..."},
+  {"level":"B2","topic":"Wirtschaft","de":"die Nachhaltigkeit","ru":"устойчивость","ex_de":"...","ex_ru":"..."}
+]
+Можно грузить 1500–2000 записей без проблем.
+*/
+function onJsonChosen(evt){
+  var file = evt.target && evt.target.files && evt.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(){
+    try{
+      var arr = JSON.parse(reader.result || "[]");
+      var added=0, L,row;
+      for (var i=0;i<arr.length;i++){
+        row = arr[i] || {};
+        L = (row.level||"").toUpperCase();
+        if (L!=="A2" && L!=="B1" && L!=="B2") continue;
+        if (!DATA[L]) DATA[L]=[];
+        DATA[L].push({
+          level:L,
+          topic: row.topic || "Allgemein",
+          de:    (row.de||"").toString(),
+          ru:    (row.ru||"").toString(),
+          ex_de: (row.ex_de||"").toString(),
+          ex_ru: (row.ex_ru||"").toString()
+        });
+        added++;
+      }
+      if (!added) throw new Error("В файле не найдено валидных записей.");
+      rebuildTopics(); applyFilters();
+      errEl.textContent = "Импортировано: " + added + " записей.";
+      fileInput.value = "";
+    } catch(e){
+      errEl.textContent = "Ошибка JSON: " + (e && e.message ? e.message : e);
+    }
+  };
+  reader.readAsText(file, "utf-8");
+}
+</script>
+</body>
+</html>
