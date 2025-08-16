@@ -31,15 +31,15 @@
   /* ====== РАЗМЕРЫ ТЕКСТА (меняй тут) ====== */
   .prompt{
     /* ⬇️ увеличь/уменьши этот размер по вкусу */
-    font-size: clamp(26px, 6.2vw, 44px); /* БЫЛО 34px */
+    font-size: clamp(26px, 6.2vw, 44px);
     margin:8px 0 6px; line-height:1.25; word-break:break-word;
-    text-align:center;   /* центрируем слово */
+    text-align:center;
   }
   .example{
     /* ⬇️ увеличь/уменьши этот размер по вкусу */
-    font-size: clamp(16px, 3.8vw, 22px); /* БЫЛО 18px */
+    font-size: clamp(16px, 3.8vw, 22px);
     color:#cbd5ff; margin: 10px 0 18px;
-    text-align:center;   /* центрируем пример */
+    text-align:center;
   }
 
   .options{display:grid;grid-template-columns:1fr;gap:10px;width:100%;margin-top:8px}
@@ -74,18 +74,18 @@
       </select>
       <button class="secondary" id="btnShuffle">Перемешать</button>
       <button class="secondary" id="btnWrong" disabled>Повторить ошибочные</button>
+
+      <!-- Ручной импорт при желании -->
       <label class="secondary" for="fileInput" style="display:inline-block;padding:10px 14px;border-radius:12px;cursor:pointer;">Загрузить JSON</label>
       <input type="file" id="fileInput" accept=".json,application/json" />
-      <!-- Кнопки Next/таймер ПЕРЕНЕСЕНЫ ВНИЗ (во footer) -->
+      <!-- Кнопка Next с таймером внизу -->
     </div>
   </header>
 
   <div class="card">
-    <div class="level-topic">
-      <span class="badge" id="levelBadge">A2</span>
-      <span class="badge" id="topicBadge">Alltag</span>
-      <span class="badge" id="metaCount">—</span>
-      <span class="badge" id="importInfo" title="Сколько записей подгружено?">…</span>
+    <div class="level-topic" id="importBadges">
+      <!-- сюда выведем бейджи по файлам -->
+      <span class="badge">Загрузка словарей…</span>
     </div>
 
     <div class="prompt" id="prompt">—</div>
@@ -109,29 +109,20 @@
 /* ========= ПАРАМЕТРЫ ========= */
 var AUTONEXT_SECONDS = 4; // ⬅️ Таймер автоперехода в секундах. Можешь менять.
 
-/* ========= ДЕМО-БАЗА (для старта). Большую базу загрузим из words.json ========= */
-var DEFAULT = {
-  A2: [
-    {level:"A2",topic:"Alltag",de:"der Alltag",ru:"повседневная жизнь",ex_de:"Im Alltag trinke ich morgens Kaffee.",ex_ru:"В повседневной жизни я пью кофе по утрам."},
-    {level:"A2",topic:"Zeit",de:"die Stunde",ru:"час",ex_de:"Der Kurs dauert eine Stunde.",ex_ru:"Курс длится один час."},
-    {level:"A2",topic:"Essen",de:"der Apfel",ru:"яблоко",ex_de:"Ich esse einen Apfel.",ex_ru:"Я ем яблоко."},
-    {level:"A2",topic:"Stadt",de:"die Strasse",ru:"улица",ex_de:"Die Strasse ist laut.",ex_ru:"Улица шумная."},
-    {level:"A2",topic:"Gesundheit",de:"der Arzt",ru:"врач",ex_de:"Ich habe einen Termin beim Arzt.",ex_ru:"У меня запись к врачу."}
-  ],
-  B1: [
-    {level:"B1",topic:"Arbeit",de:"die Voraussetzung",ru:"условие, предпосылка",ex_de:"Deutschkenntnisse sind eine Voraussetzung.",ex_ru:"Знание немецкого — условие."},
-    {level:"B1",topic:"Reisen",de:"die Unterkunft",ru:"жильё",ex_de:"Wir suchen eine guenstige Unterkunft.",ex_ru:"Мы ищем недорогое жильё."},
-    {level:"B1",topic:"Kommunikation",de:"sich erkundigen",ru:"осведомляться, справляться",ex_de:"Ich erkundige mich nach dem Preis.",ex_ru:"Я узнаю цену."}
-  ],
-  B2: [
-    {level:"B2",topic:"Arbeit",de:"die Herausforderung",ru:"вызов, сложная задача",ex_de:"Die neue Stelle ist eine Herausforderung.",ex_ru:"Новая должность — вызов."},
-    {level:"B2",topic:"Politik",de:"die Massnahme",ru:"мера",ex_de:"Die Regierung beschliesst neue Massnahmen.",ex_ru:"Правительство принимает новые меры."},
-    {level:"B2",topic:"Wissenschaft",de:"die Erkenntnis",ru:"познание, вывод",ex_de:"Die Studie fuehrt zu neuer Erkenntnis.",ex_ru:"Исследование приводит к новому выводу."}
-  ]
-};
+/* ========= ФАЙЛЫ ТЕМ (лежать в той же папке docs/) ========= */
+var TOPIC_FILES = [
+  "arbeit.json",
+  "bildung.json",
+  "alltag.json",
+  "it.json",
+  "business.json",
+  "restaurant.json",
+  "urlaub.json",
+  "familie.json"
+];
 
 /* ========= СОСТОЯНИЕ ========= */
-var DATA = JSON.parse(JSON.stringify(DEFAULT));
+var DATA = {A2:[], B1:[], B2:[]};  // без дефолтных слов
 var mode = "de2ru";       // de2ru | ru2de
 var level = "A2";         // A2 | B1 | B2 | ALL
 var topic = "all";
@@ -139,7 +130,7 @@ var source = [];          // активные карточки
 var order = [];           // порядок индексов
 var pointer = 0;          // позиция
 var answeredWrong = {};   // { orderIndex: true }
-var wrongCounter = 0;     // ⬅️ счётчик ошибок для кнопки
+var wrongCounter = 0;     // счётчик ошибок для кнопки
 
 var countdownTimer = null, countdownTimeout = null, secondsLeft = AUTONEXT_SECONDS;
 
@@ -151,15 +142,12 @@ var btnWrong      = document.getElementById('btnWrong');
 var btnNext       = document.getElementById('btnNext');
 var fileInput     = document.getElementById('fileInput');
 
-var levelBadge    = document.getElementById('levelBadge');
-var topicBadge    = document.getElementById('topicBadge');
-var metaCount     = document.getElementById('metaCount');
-var importInfo    = document.getElementById('importInfo');
 var promptEl      = document.getElementById('prompt');
 var exampleEl     = document.getElementById('example');
 var optionsEl     = document.getElementById('options');
 var progressEl    = document.getElementById('progress');
 var errEl         = document.getElementById('err');
+var importBadges  = document.getElementById('importBadges');
 
 /* ========= УТИЛЫ ========= */
 function shuffle(arr){ for(var i=arr.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1)); var t=arr[i]; arr[i]=arr[j]; arr[j]=t;} return arr; }
@@ -184,19 +172,44 @@ function flatAllLevels(){ return [].concat(DATA.A2||[], DATA.B1||[], DATA.B2||[]
   // загрузка JSON вручную
   fileInput.addEventListener('change', onJsonChosen);
 
-  // автозагрузка words.json (если лежит рядом)
-  autoFetchWordsJSON();
-
-  rebuildTopics();
-  applyFilters();
+  // автоподгрузка всех файлов тем
+  loadTopicFiles();
 })();
 
-/* ==== автозагрузка words.json с GitHub Pages ==== */
-function autoFetchWordsJSON(){
-  fetch('words.json', {cache:'no-store'})
-    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(function(arr){ var added = mergeImported(arr); importInfo.textContent = 'Импорт: '+added+' записей'; })
-    .catch(function(){ importInfo.textContent = 'Импорт: 0 (нет words.json)'; });
+/* ==== загрузка всех файлов по списку ==== */
+function loadTopicFiles(){
+  importBadges.innerHTML = "";
+  var loadedCount = 0;
+  TOPIC_FILES.forEach(function(fname){
+    fetch(fname+'?t='+(Date.now()), {cache:'no-store'})
+      .then(function(r){
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        return r.json();
+      })
+      .then(function(arr){
+        var added = mergeImported(arr||[]);
+        badge(fname, 'ok', added+' шт');
+      })
+      .catch(function(err){
+        badge(fname, 'fail', 'нет файла');
+      })
+      .finally(function(){
+        loadedCount++;
+        if (loadedCount===TOPIC_FILES.length){
+          rebuildTopics();
+          applyFilters();
+        }
+      });
+  });
+}
+
+function badge(name, status, text){
+  var span = document.createElement('span');
+  span.className = 'badge';
+  span.textContent = name+': '+text;
+  if(status==='ok') span.style.background = '#1e3a2a';
+  if(status==='fail') span.style.background = '#402026';
+  importBadges.appendChild(span);
 }
 
 function mergeImported(arr){
@@ -216,13 +229,12 @@ function mergeImported(arr){
     });
     added++;
   }
-  if (added>0){ rebuildTopics(); applyFilters(); }
   return added;
 }
 
 /* ========= ФИЛЬТРЫ/РЕНДЕР ========= */
 function rebuildTopics(){
-  var data = (level==="ALL") ? flatAllLevels() : (DATA[level]||[]);
+  var data = flatAllLevels();
   var topicsMap = {};
   for (var i=0;i<data.length;i++){ topicsMap[data[i].topic] = true; }
   var topics = Object.keys(topicsMap).sort();
@@ -234,9 +246,11 @@ function rebuildTopics(){
 }
 
 function applyFilters(){
-  var base = (level==="ALL") ? flatAllLevels() : (DATA[level]||[]);
+  var base;
+  if (level==="ALL") base = flatAllLevels();
+  else base = (DATA[level]||[]);
   source = (topic==='all') ? base : base.filter(function(w){ return w.topic===topic; });
-  if (!source || !source.length) source = base.length? base : flatAllLevels();
+  if (!source || !source.length) { promptEl.textContent="Нет карточек (добавь JSON в docs/)."; exampleEl.textContent=""; optionsEl.innerHTML=""; return; }
   answeredWrong = {};
   wrongCounter = 0;
   updateWrongButton();
@@ -254,16 +268,12 @@ function resetOrder(){
 
 function updateMeta(){
   progressEl.textContent = Math.min(pointer+1, order.length) + " / " + order.length;
-  levelBadge.textContent = (level==="ALL") ? "A2–B2" : level;
-  topicBadge.textContent = (topic==='all') ? "Alle Themen" : topic;
-  metaCount.textContent  = "в наборе: " + order.length;
 }
 
 function renderCard(){
   try{
     if (!order.length){ promptEl.textContent="Нет карточек."; exampleEl.textContent=""; optionsEl.innerHTML=""; return; }
 
-    updateMeta(); errEl.textContent = "";
     var idx = order[pointer];
     var card = source[idx] || {};
 
@@ -277,7 +287,7 @@ function renderCard(){
     // варианты
     var pool = [];
     for (var i=0;i<source.length;i++) if (i!==idx) pool.push(source[i]);
-    if (pool.length < 2){ pool = (level==="ALL") ? flatAllLevels() : (DATA[level]||[]).slice(0); }
+    if (pool.length < 2){ pool = (DATA[level]||[]).slice(0); }
     shuffle(pool);
     var distractors = [];
     for (var k=0;k<pool.length && distractors.length<2;k++){
@@ -299,6 +309,7 @@ function renderCard(){
     }
     resetNextLabel();
   } catch(e){
+    console.error(e);
     errEl.textContent = "Ошибка: " + (e && e.message ? e.message : e);
   }
 }
@@ -376,7 +387,11 @@ function onJsonChosen(evt){
   reader.onload = function(){
     try{
       var arr = JSON.parse(reader.result || "[]");
-      var added = mergeImported(arr);
+      var added = 0;
+      // можно скормить сразу массив из разных тем
+      added += mergeImported(arr);
+      // после ручной загрузки пересобираем и показываем
+      rebuildTopics(); applyFilters();
       errEl.textContent = "Импортировано: " + added + " записей.";
       fileInput.value = "";
     } catch(e){
